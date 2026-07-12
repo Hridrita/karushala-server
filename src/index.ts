@@ -8,7 +8,10 @@ dotenv.config();
 const app = express();
 const port: number = parseInt(process.env.PORT!, 10);
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.BETTER_AUTH_URL,
+  credentials: true
+}));
 app.use(express.json());
 
 const uri: string = process.env.MONGODB_URI!;
@@ -28,6 +31,29 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
+
+
+
+
+    const db = client.db("karushala_db")
+    const allCraftCollection = db.collection("All-Craft")
+
+    app.post("/api/crafts", async(req: Request ,res:Response)=>{
+      const craft = req.body
+      const result = await allCraftCollection.insertOne(craft)
+      res.json(result)
+    })
+
+
+
+
+
+
+
+
+
+
+
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } catch (error) {
@@ -36,6 +62,7 @@ async function run() {
 }
 
 run().catch(console.dir);
+
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
