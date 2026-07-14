@@ -39,6 +39,7 @@ async function run() {
     const allCraftCollection = db.collection("All-Craft");
     const reviewsCollection = db.collection("Reviews");
     const ordersCollection = db.collection("Orders");
+    const usersCollection = db.collection("user");
 
     app.post("/api/crafts", async (req: Request, res: Response) => {
       const craft = req.body;
@@ -461,11 +462,7 @@ async function run() {
       }
     });
 
-    /**
-     * GET /api/dashboard/stats
-     * Get only stats (total crafts, reviews, etc.)
-     * Query params: email (required)
-     */
+    
     app.get("/api/dashboard/stats", async (req: Request, res: Response) => {
       const { email } = req.query;
 
@@ -521,6 +518,211 @@ async function run() {
         res.status(500).json({ message: "Failed to fetch stats" });
       }
     });
+
+
+
+
+    
+app.get("/api/profile", async (req: Request, res: Response) => {
+  const { email } = req.query;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email required" });
+  }
+
+  try {
+    // Get user from better-auth users collection
+    const usersCollection = db.collection("user");
+    const user = await usersCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Get user's crafts count
+    const craftsCount = await allCraftCollection.countDocuments({
+      sellerEmail: email,
+    });
+
+    // Get user's crafts for review calculation
+    const crafts = await allCraftCollection
+      .find({ sellerEmail: email })
+      .toArray();
+    const craftIds = crafts.map((c) => c._id.toString());
+
+    // Get reviews for user's crafts
+    const reviews = await reviewsCollection
+      .find({ craftId: { $in: craftIds } })
+      .toArray();
+
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews
+      : 0;
+
+    // Calculate total sales (if orders collection exists)
+    let totalSales = 0;
+    try {
+      const collections = await db.listCollections().toArray();
+      const hasOrdersCollection = collections.some(c => c.name === "Orders");
+
+      if (hasOrdersCollection) {
+        const salesResult = await ordersCollection.aggregate([
+          { $match: { sellerEmail: email } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]).toArray();
+
+        if (salesResult.length > 0) {
+          totalSales = salesResult[0].total;
+        }
+      }
+    } catch (error) {
+      console.error("Sales calculation error:", error);
+    }
+
+    // Return profile data
+    res.json({
+      _id: user._id,
+      name: user.name || "",
+      email: user.email,
+      phone: user.phone || "",
+      address: user.address || "",
+      city: user.city || "",
+      district: user.district || "",
+      bio: user.bio || "",
+      avatar: user.avatar || "",
+      role: user.role || "artisan",
+      joinDate: user.createdAt || new Date(),
+      totalCrafts: craftsCount,
+      totalSales,
+      totalReviews,
+      averageRating,
+    });
+  } catch (error) {
+    console.error("Profile error:", error);
+    res.status(500).json({ message: "Failed to fetch profile" });
+  }
+});
+
+
+app.put("/api/profile", async (req: Request, res: Response) => {
+  const { email, name, phone, address, city, district, bio, avatar } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email required" });
+  }
+
+  try {
+    const usersCollection = db.collection("user");
+
+    // Build update object (only include fields that are provided)
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (address !== undefined) updateData.address = address;
+    if (city !== undefined) updateData.city = city;
+    if (district !== undefined) updateData.district = district;
+    if (bio !== undefined) updateData.bio = bio;
+    if (avatar !== undefined) updateData.avatar = avatar;
+
+    // Update user
+    const result = await usersCollection.updateOne(
+      { email },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Get updated user
+    const updatedUser = await usersCollection.findOne({ email });
+
+    // Get stats for response
+    const craftsCount = await allCraftCollection.countDocuments({
+      sellerEmail: email,
+    });
+
+    const crafts = await allCraftCollection
+      .find({ sellerEmail: email })
+      .toArray();
+    const craftIds = crafts.map((c) => c._id.toString());
+
+    const reviews = await reviewsCollection
+      .find({ craftId: { $in: craftIds } })
+      .toArray();
+
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews
+      : 0;
+
+    let totalSales = 0;
+    try {
+      const collections = await db.listCollections().toArray();
+      const hasOrdersCollection = collections.some(c => c.name === "Orders");
+
+      if (hasOrdersCollection) {
+        const salesResult = await ordersCollection.aggregate([
+          { $match: { sellerEmail: email } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]).toArray();
+
+        if (salesResult.length > 0) {
+          totalSales = salesResult[0].total;
+        }
+      }
+    } catch (error) {
+      console.error("Sales calculation error:", error);
+    }
+
+    res.json({
+      _id: updatedUser?._id,
+      name: updatedUser?.name || "",
+      email: updatedUser?.email,
+      phone: updatedUser?.phone || "",
+      address: updatedUser?.address || "",
+      city: updatedUser?.city || "",
+      district: updatedUser?.district || "",
+      bio: updatedUser?.bio || "",
+      avatar: updatedUser?.avatar || "",
+      role: updatedUser?.role || "artisan",
+      joinDate: updatedUser?.createdAt || new Date(),
+      totalCrafts: craftsCount,
+      totalSales,
+      totalReviews,
+      averageRating,
+    });
+  } catch (error) {
+    console.error("Profile update error:", error);
+    res.status(500).json({ message: "Failed to update profile" });
+  }
+});
+
+
+app.post("/api/profile/avatar", async (req: Request, res: Response) => {
+  
+  try {
+    
+    const { email, avatar } = req.body;
+
+    if (!email || !avatar) {
+      return res.status(400).json({ message: "Email and avatar required" });
+    }
+
+    // Update user with avatar
+    
+    await usersCollection.updateOne(
+      { email },
+      { $set: { avatar } }
+    );
+
+    res.json({ message: "Avatar updated successfully", avatarUrl: avatar });
+  } catch (error) {
+    console.error("Avatar upload error:", error);
+    res.status(500).json({ message: "Failed to upload avatar" });
+  }
+});
 
 
 
