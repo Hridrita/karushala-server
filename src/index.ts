@@ -978,7 +978,7 @@ app.get("/api/reviews/public", async (req: Request, res: Response) => {
 
     
 
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
@@ -992,3 +992,7 @@ run().catch(console.dir);
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
+
+
+
+export default app;
