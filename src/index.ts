@@ -1,5 +1,5 @@
 import express from "express";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
@@ -36,15 +36,17 @@ const JWKS = createRemoteJWKSet(
   new URL(`${process.env.BETTER_AUTH_URL}/api/auth/jwks`)
 )
 
-const verifyToken = async(req,res,next) =>{
+const verifyToken = async(req: Request,res: Response,next:NextFunction):Promise<void> =>{
   const authHeader = req.headers.authorization
   if(!authHeader){
-    return res.status(401).json({message: "Unauthorized"})
+   res.status(401).json({message: "Unauthorized"})
+   return;
   }
   // console.log(authHeader);
   const token = authHeader.split(" ")[1]
   if(!token){
-     return res.status(401).json({message: "Unauthorized"})
+     res.status(401).json({message: "Unauthorized"});
+     return
   }
 
   try{
@@ -52,7 +54,8 @@ const verifyToken = async(req,res,next) =>{
   // console.log(payload);
   next()
   } catch(error) {
-    return res.status(403).json({message: "Fprbidden"})
+    res.status(403).json({message: "Fprbidden"})
+    return;
   }
   
   
