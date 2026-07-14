@@ -31,6 +31,31 @@ const client = new MongoClient(uri, {
   },
 });
 
+
+
+const DEMO_EMAILS = ["demo@karushala.com", "demo@example.com", "test@karushala.com"];
+
+const isDemoUser = (email: string): boolean => {
+  if (!email) return false;
+  return DEMO_EMAILS.includes(email.toLowerCase());
+};
+
+// Middleware for restricting demo users
+const restrictDemoUser = (req: Request, res: Response, next: Function) => {
+  // Get email from body, query, or headers
+  const email = req.body?.email || req.query?.email || req.headers['x-user-email'];
+  
+  if (isDemoUser(email)) {
+    return res.status(403).json({
+      success: false,
+      message: "Demo users cannot perform this action. Please create your own account.",
+      code: "DEMO_RESTRICTED"
+    });
+  }
+  
+  next();
+};
+
 async function run() {
   try {
     await client.connect();
@@ -41,7 +66,7 @@ async function run() {
     const ordersCollection = db.collection("Orders");
     const usersCollection = db.collection("user");
 
-    app.post("/api/crafts", async (req: Request, res: Response) => {
+    app.post("/api/crafts",restrictDemoUser, async (req: Request, res: Response) => {
       const craft = req.body;
       const result = await allCraftCollection.insertOne(craft);
       res.json(result);
@@ -77,7 +102,7 @@ async function run() {
       res.json(result);
     });
 
-    app.delete("/api/crafts/:id", async (req: Request, res: Response) => {
+    app.delete("/api/crafts/:id",restrictDemoUser, async (req: Request, res: Response) => {
       const { id } = req.params;
       const result = await allCraftCollection.deleteOne({
         _id: new ObjectId(id),
@@ -143,11 +168,7 @@ async function run() {
 
 
 
-    /**
-     * GET /api/dashboard
-     * Get all dashboard statistics for a specific artisan
-     * Query params: email (required)
-     */
+    
     app.get("/api/dashboard", async (req: Request, res: Response) => {
       const { email } = req.query;
 
@@ -280,11 +301,7 @@ async function run() {
       }
     });
 
-    /**
-     * GET /api/dashboard/sales
-     * Get sales data for a specific artisan (for chart)
-     * Query params: email (required)
-     */
+    
     app.get("/api/dashboard/sales", async (req: Request, res: Response) => {
       const { email } = req.query;
 
@@ -339,11 +356,7 @@ async function run() {
       }
     });
 
-    /**
-     * GET /api/dashboard/reviews
-     * Get all reviews for an artisan's crafts
-     * Query params: email (required)
-     */
+    
     app.get("/api/dashboard/reviews", async (req: Request, res: Response) => {
       const { email } = req.query;
 
@@ -385,12 +398,8 @@ async function run() {
       }
     });
 
-    /**
-     * PUT /api/crafts/:id
-     * Update a craft
-     * Body: craft data
-     */
-    app.put("/api/crafts/:id", async (req: Request, res: Response) => {
+    
+    app.put("/api/crafts/:id",restrictDemoUser, async (req: Request, res: Response) => {
       const { id } = req.params;
       const updates = req.body;
 
@@ -422,11 +431,7 @@ async function run() {
       }
     });
 
-    /**
-     * GET /api/crafts/my-crafts/paginated
-     * Get artisan's crafts with pagination
-     * Query params: email (required), page, limit
-     */
+    
     app.get("/api/crafts/my-crafts/paginated", async (req: Request, res: Response) => {
       const { email, page = "1", limit = "10" } = req.query;
 
@@ -605,7 +610,7 @@ app.get("/api/profile", async (req: Request, res: Response) => {
 });
 
 
-app.put("/api/profile", async (req: Request, res: Response) => {
+app.put("/api/profile",restrictDemoUser, async (req: Request, res: Response) => {
   const { email, name, phone, address, city, district, bio, avatar } = req.body;
 
   if (!email) {
@@ -700,7 +705,7 @@ app.put("/api/profile", async (req: Request, res: Response) => {
 });
 
 
-app.post("/api/profile/avatar", async (req: Request, res: Response) => {
+app.post("/api/profile/avatar",restrictDemoUser, async (req: Request, res: Response) => {
   
   try {
     
@@ -723,6 +728,149 @@ app.post("/api/profile/avatar", async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to upload avatar" });
   }
 });
+
+
+
+app.get("/api/settings", async (req: Request, res: Response) => {
+  const { email } = req.query;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email required" });
+  }
+
+  try {
+    const usersCollection = db.collection("user");
+    const user = await usersCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Return settings (with defaults)
+    res.json({
+      name: user.name || "",
+      email: user.email,
+      phone: user.phone || "",
+      notifications: user.notifications || {
+        email: true,
+        push: true,
+        sms: false,
+      },
+      privacy: user.privacy || {
+        profileVisibility: "public",
+        showEmail: true,
+        showPhone: false,
+      },
+      store: user.store || {
+        name: "",
+        description: "",
+      },
+      appearance: user.appearance || {
+        theme: "dark",
+      },
+      language: user.language || "en",
+      currency: user.currency || "BDT",
+    });
+  } catch (error) {
+    console.error("Settings error:", error);
+    res.status(500).json({ message: "Failed to fetch settings" });
+  }
+});
+
+
+app.put("/api/settings",restrictDemoUser, async (req: Request, res: Response) => {
+  const { email, section, data } = req.body;
+
+  if (!email || !section || !data) {
+    return res.status(400).json({ message: "Email, section, and data required" });
+  }
+
+  try {
+    const usersCollection = db.collection("user");
+
+    // Build update object based on section
+    const updateData: any = {};
+    
+    if (section === "profile") {
+      if (data.name) updateData.name = data.name;
+      if (data.phone) updateData.phone = data.phone;
+    } else if (section === "notifications") {
+      updateData.notifications = data;
+    } else if (section === "privacy") {
+      updateData.privacy = data;
+    } else if (section === "store") {
+      updateData.store = data;
+    } else if (section === "appearance") {
+      updateData.appearance = data;
+    } else if (section === "language") {
+      updateData.language = data.language;
+      updateData.currency = data.currency;
+    } else if (section === "security") {
+      // Handle password change
+      // You should hash the password before saving
+      // This is a simplified example
+    }
+
+    // Update user
+    const result = await usersCollection.updateOne(
+      { email },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Get updated user
+    const updatedUser = await usersCollection.findOne({ email });
+
+    // Return updated settings
+    res.json({
+      name: updatedUser?.name || "",
+      email: updatedUser?.email,
+      phone: updatedUser?.phone || "",
+      notifications: updatedUser?.notifications || {
+        email: true,
+        push: true,
+        sms: false,
+      },
+      privacy: updatedUser?.privacy || {
+        profileVisibility: "public",
+        showEmail: true,
+        showPhone: false,
+      },
+      store: updatedUser?.store || {
+        name: "",
+        description: "",
+      },
+      appearance: updatedUser?.appearance || {
+        theme: "dark",
+      },
+      language: updatedUser?.language || "en",
+      currency: updatedUser?.currency || "BDT",
+    });
+  } catch (error) {
+    console.error("Settings update error:", error);
+    res.status(500).json({ message: "Failed to update settings" });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
