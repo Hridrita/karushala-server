@@ -388,7 +388,7 @@ async function run() {
     });
 
     
-    app.get("/api/dashboard/reviews",verifyToken, async (req: Request, res: Response) => {
+    app.get("/api/dashboard/reviews", async (req: Request, res: Response) => {
       const { email } = req.query;
 
       if (!email) {
@@ -883,6 +883,49 @@ app.put("/api/settings",restrictDemoUser,verifyToken, async (req: Request, res: 
   } catch (error) {
     console.error("Settings update error:", error);
     res.status(500).json({ message: "Failed to update settings" });
+  }
+});
+
+
+
+
+app.get("/api/reviews/public", async (req: Request, res: Response) => {
+  try {
+   
+    const reviews = await reviewsCollection
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .toArray();
+
+   
+    const reviewsWithTitles = await Promise.all(
+      reviews.map(async (review) => {
+        try {
+          const craft = await allCraftCollection.findOne({
+            _id: new ObjectId(review.craftId),
+          });
+          return {
+            name: review.name || "Anonymous",
+            comment: review.comment || "",
+            rating: review.rating || 0,
+            craftTitle: craft?.title || "Unknown Craft",
+          };
+        } catch (err) {
+          return {
+            name: review.name || "Anonymous",
+            comment: review.comment || "",
+            rating: review.rating || 0,
+            craftTitle: "Unknown Craft",
+          };
+        }
+      })
+    );
+
+    res.json(reviewsWithTitles);
+  } catch (error) {
+    console.error("Public reviews error:", error);
+    res.status(500).json({ message: "Failed to fetch reviews" });
   }
 });
 
