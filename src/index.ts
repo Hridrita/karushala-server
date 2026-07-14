@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
+import { createRemoteJWKSet, jwtVerify } from "jose-cjs";
 
 
 dotenv.config();
@@ -30,6 +31,33 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.BETTER_AUTH_URL}/api/auth/jwks`)
+)
+
+const verifyToken = async(req,res,next) =>{
+  const authHeader = req.headers.authorization
+  if(!authHeader){
+    return res.status(401).json({message: "Unauthorized"})
+  }
+  // console.log(authHeader);
+  const token = authHeader.split(" ")[1]
+  if(!token){
+     return res.status(401).json({message: "Unauthorized"})
+  }
+
+  try{
+    const {payload} = await jwtVerify(token,JWKS)
+  // console.log(payload);
+  next()
+  } catch(error) {
+    return res.status(403).json({message: "Fprbidden"})
+  }
+  
+  
+
+}
 
 
 
@@ -66,7 +94,7 @@ async function run() {
     const ordersCollection = db.collection("Orders");
     const usersCollection = db.collection("user");
 
-    app.post("/api/crafts",restrictDemoUser, async (req: Request, res: Response) => {
+    app.post("/api/crafts",restrictDemoUser,verifyToken, async (req: Request, res: Response) => {
       const craft = req.body;
       const result = await allCraftCollection.insertOne(craft);
       res.json(result);
@@ -77,7 +105,7 @@ async function run() {
       res.json(result);
     });
 
-    app.get("/api/crafts/my-crafts", async (req: Request, res: Response) => {
+    app.get("/api/crafts/my-crafts",verifyToken, async (req: Request, res: Response) => {
       const { email } = req.query;
       if (!email) {
         return res.status(400).json({ message: "Email required" });
@@ -124,7 +152,7 @@ async function run() {
     });
 
     // Add review to separate collection + sync avg rating on craft
-    app.post("/api/crafts/:id/reviews", async (req: Request, res: Response) => {
+    app.post("/api/crafts/:id/reviews",verifyToken, async (req: Request, res: Response) => {
       const { id } = req.params;
       const { name, email, comment, rating } = req.body;
 
@@ -169,7 +197,7 @@ async function run() {
 
 
     
-    app.get("/api/dashboard", async (req: Request, res: Response) => {
+    app.get("/api/dashboard",verifyToken, async (req: Request, res: Response) => {
       const { email } = req.query;
 
       if (!email) {
@@ -302,7 +330,7 @@ async function run() {
     });
 
     
-    app.get("/api/dashboard/sales", async (req: Request, res: Response) => {
+    app.get("/api/dashboard/sales",verifyToken, async (req: Request, res: Response) => {
       const { email } = req.query;
 
       if (!email) {
@@ -357,7 +385,7 @@ async function run() {
     });
 
     
-    app.get("/api/dashboard/reviews", async (req: Request, res: Response) => {
+    app.get("/api/dashboard/reviews",verifyToken, async (req: Request, res: Response) => {
       const { email } = req.query;
 
       if (!email) {
@@ -432,7 +460,7 @@ async function run() {
     });
 
     
-    app.get("/api/crafts/my-crafts/paginated", async (req: Request, res: Response) => {
+    app.get("/api/crafts/my-crafts/paginated",verifyToken, async (req: Request, res: Response) => {
       const { email, page = "1", limit = "10" } = req.query;
 
       if (!email) {
@@ -468,7 +496,7 @@ async function run() {
     });
 
     
-    app.get("/api/dashboard/stats", async (req: Request, res: Response) => {
+    app.get("/api/dashboard/stats",verifyToken, async (req: Request, res: Response) => {
       const { email } = req.query;
 
       if (!email) {
@@ -528,7 +556,7 @@ async function run() {
 
 
     
-app.get("/api/profile", async (req: Request, res: Response) => {
+app.get("/api/profile",verifyToken, async (req: Request, res: Response) => {
   const { email } = req.query;
 
   if (!email) {
@@ -610,7 +638,7 @@ app.get("/api/profile", async (req: Request, res: Response) => {
 });
 
 
-app.put("/api/profile",restrictDemoUser, async (req: Request, res: Response) => {
+app.put("/api/profile",restrictDemoUser,verifyToken, async (req: Request, res: Response) => {
   const { email, name, phone, address, city, district, bio, avatar } = req.body;
 
   if (!email) {
@@ -731,7 +759,7 @@ app.post("/api/profile/avatar",restrictDemoUser, async (req: Request, res: Respo
 
 
 
-app.get("/api/settings", async (req: Request, res: Response) => {
+app.get("/api/settings",verifyToken, async (req: Request, res: Response) => {
   const { email } = req.query;
 
   if (!email) {
@@ -778,7 +806,7 @@ app.get("/api/settings", async (req: Request, res: Response) => {
 });
 
 
-app.put("/api/settings",restrictDemoUser, async (req: Request, res: Response) => {
+app.put("/api/settings",restrictDemoUser,verifyToken, async (req: Request, res: Response) => {
   const { email, section, data } = req.body;
 
   if (!email || !section || !data) {
@@ -854,6 +882,11 @@ app.put("/api/settings",restrictDemoUser, async (req: Request, res: Response) =>
     res.status(500).json({ message: "Failed to update settings" });
   }
 });
+
+
+
+
+
 
 
 
