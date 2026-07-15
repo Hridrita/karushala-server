@@ -120,7 +120,7 @@ async function run() {
     });
 
     app.get("/api/crafts/:id", async (req: Request, res: Response) => {
-      const { id } = req.params;
+      const  id  = req.params.id as string;
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ message: "Invalid ID" });
       }
@@ -134,7 +134,7 @@ async function run() {
     });
 
     app.delete("/api/crafts/:id",restrictDemoUser, async (req: Request, res: Response) => {
-      const { id } = req.params;
+      const id  = req.params.id as string;
       const result = await allCraftCollection.deleteOne({
         _id: new ObjectId(id),
       });
@@ -143,7 +143,7 @@ async function run() {
 
     // Get all reviews for a craft
     app.get("/api/crafts/:id/reviews", async (req: Request, res: Response) => {
-      const { id } = req.params;
+      const  id  = req.params.id as string;
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ message: "Invalid ID" });
       }
@@ -156,7 +156,7 @@ async function run() {
 
     // Add review to separate collection + sync avg rating on craft
     app.post("/api/crafts/:id/reviews",verifyToken, async (req: Request, res: Response) => {
-      const { id } = req.params;
+      const  id  = req.params.id as string;
       const { name, email, comment, rating } = req.body;
 
       if (!ObjectId.isValid(id)) {
@@ -431,7 +431,7 @@ async function run() {
 
     
     app.put("/api/crafts/:id",restrictDemoUser, async (req: Request, res: Response) => {
-      const { id } = req.params;
+      const id  = req.params.id as string;
       const updates = req.body;
 
       if (!ObjectId.isValid(id)) {
@@ -536,7 +536,7 @@ async function run() {
             ]).toArray();
             
             if (salesResult.length > 0) {
-              totalSales = salesResult[0].total;
+              totalSales = salesResult[0]!.total;
             }
           }
         } catch (error) {
@@ -609,7 +609,7 @@ app.get("/api/profile",verifyToken, async (req: Request, res: Response) => {
         ]).toArray();
 
         if (salesResult.length > 0) {
-          totalSales = salesResult[0].total;
+          totalSales = salesResult[0]!.total;
         }
       }
     } catch (error) {
@@ -705,7 +705,7 @@ app.put("/api/profile",restrictDemoUser,verifyToken, async (req: Request, res: R
         ]).toArray();
 
         if (salesResult.length > 0) {
-          totalSales = salesResult[0].total;
+          totalSales = salesResult[0]!.total;
         }
       }
     } catch (error) {
@@ -992,7 +992,6 @@ run().catch(console.dir);
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
-
 
 
 export default app;
